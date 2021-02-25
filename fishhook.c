@@ -141,6 +141,7 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
   vm_prot_t oldProtection = VM_PROT_READ;
   if (isDataConst) {
     oldProtection = get_protection(rebindings);
+    //mprotect 修改指定内容的 权限
     mprotect(indirect_symbol_bindings, section->size, PROT_READ | PROT_WRITE);
   }
 
@@ -152,6 +153,19 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
         symtab_index == (INDIRECT_SYMBOL_LOCAL   | INDIRECT_SYMBOL_ABS)) {
       continue;
     }
+    /*
+    This is the symbol table entry structure for 32-bit architectures.
+    struct nlist {
+      union {
+          uint32_t n_strx;    /* index into the string table */
+      } n_un;
+  
+      uint8_t n_type;        /* type flag, see below */
+      uint8_t n_sect;        /* section number or NO_SECT */
+      int16_t n_desc;        /* see <mach-o/stab.h> */
+      uint32_t n_value;    /* value of this symbol (or stab offset) */
+   };
+*/
     //symtab[symtab_index] 对应符号表中的符号
     //找到符号在符号表中的偏移
     uint32_t strtab_offset = symtab[symtab_index].n_un.n_strx;
@@ -203,6 +217,7 @@ static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
                                      const struct mach_header *header,
                                      intptr_t slide) {
   Dl_info info;
+  //获取 header 所在的模块, 地址
   if (dladdr(header, &info) == 0) {
     return;
   }
@@ -243,7 +258,7 @@ static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
   }
 
   // Find base symbol/string table addresses
-  //linkedit_base 即面前提到的基地址, 通过基地址 + 各种表在文件中的偏移 = 各种表的内存中的位置
+  //linkedit_base 即面前提到的基地 = ASLR(随机地址偏移) + 虚拟内存的地址 - 在文件中的偏移地址
   uintptr_t linkedit_base = (uintptr_t)slide + linkedit_segment->vmaddr - linkedit_segment->fileoff;
   //找到符号表
   nlist_t *symtab = (nlist_t *)(linkedit_base + symtab_cmd->symoff);
